@@ -11,7 +11,7 @@ const Sidebar = ({
 }) => {
   return (
     <div className="w-1/4 bg-gray-100 p-6 flex flex-col h-full">
-      <h1 className="text-3xl font-extrabold text-gray-500 mt-4 mb-8">Aju's Tasks</h1>
+      <h1 className="text-3xl font-extrabold text-gray-500 mt-4 mb-8">Juno Tasks</h1>
       <div className="flex-grow overflow-y-auto space-y-2">
         <button
           onClick={() => setActiveSegment('All')}

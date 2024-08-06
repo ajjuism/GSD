@@ -214,7 +214,7 @@ const TodayView = ({
       </div>
 
       <div className="flex-grow overflow-y-auto">
-        <h3 className="text-xl font-semibold mb-4">Tasks for Today</h3>
+        <h3 className="text-xl font-semibold mb-4 text-gray-600">Tasks for Today</h3>
         {todayItems.length === 0 ? (
           <p className="text-gray-500 italic">No tasks scheduled for today.</p>
         ) : (
