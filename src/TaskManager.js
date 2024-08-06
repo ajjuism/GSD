@@ -1,295 +1,382 @@
 import React, { useState, useEffect } from 'react';
-import { PlusCircle, Trash2, CheckCircle, Plus, X, Calendar, ChevronLeft, ChevronRight, Edit2, Link, Loader } from 'lucide-react';
-import SegmentManagement from './SegmentManagement';
+import { PlusCircle, Loader } from 'lucide-react';
+import Sidebar from './Sidebar';
+import TaskList from './TaskList';
+import TodayView from './TodayView';
+import AddEditSegmentModal from './AddEditSegmentModal';
+import DeleteSegmentModal from './DeleteSegmentModal';
+import MoveTaskModal from './MoveTaskModal';
 
 const TaskManager = () => {
-  const [segments, setSegments] = useState(() => {
-    const savedSegments = localStorage.getItem('segments');
-    return savedSegments ? JSON.parse(savedSegments) : ['Personal', 'Work'];
-  });
   const [tasks, setTasks] = useState(() => {
-    const savedTasks = localStorage.getItem('tasks');
-    return savedTasks ? JSON.parse(savedTasks) : {};
+    try {
+      const savedTasks = localStorage.getItem('tasks');
+      const parsedTasks = savedTasks ? JSON.parse(savedTasks) : [];
+      return Array.isArray(parsedTasks) ? parsedTasks : [];
+    } catch (error) {
+      console.error('Error parsing tasks from localStorage:', error);
+      return [];
+    }
   });
+
+  const [segments, setSegments] = useState(() => {
+    try {
+      const savedSegments = localStorage.getItem('segments');
+      const parsedSegments = savedSegments ? JSON.parse(savedSegments) : ['Personal', 'Work'];
+      return Array.isArray(parsedSegments) 
+        ? parsedSegments.map(seg => typeof seg === 'string' ? seg : (seg.name || 'Unnamed Segment'))
+        : ['Personal', 'Work'];
+    } catch (error) {
+      console.error('Error parsing segments from localStorage:', error);
+      return ['Personal', 'Work'];
+    }
+  });
+
+  const [activeSegment, setActiveSegment] = useState('All');
   const [newTask, setNewTask] = useState('');
-  const [newSegment, setNewSegment] = useState('');
-  const [activeSegment, setActiveSegment] = useState('Personal');
-  const [taskDeadline, setTaskDeadline] = useState('');
-  const [editingTask, setEditingTask] = useState(null);
-  const [taskLink, setTaskLink] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
-  const [isAddingTask, setIsAddingTask] = useState(false);
+  const [newTaskSegment, setNewTaskSegment] = useState('All');
+  const [newTaskPriority, setNewTaskPriority] = useState('low');
+  const [editingSegment, setEditingSegment] = useState(null);
+  const [deletingSegment, setDeletingSegment] = useState(null);
+  const [movingTask, setMovingTask] = useState(null);
   const [isAddingSegment, setIsAddingSegment] = useState(false);
+  const [isAddingTask, setIsAddingTask] = useState(false);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-    }, 1000); // Simulating initial load time
-
-    return () => clearTimeout(timer);
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem('segments', JSON.stringify(segments));
     localStorage.setItem('tasks', JSON.stringify(tasks));
-  }, [segments, tasks]);
+    localStorage.setItem('segments', JSON.stringify(segments));
+  }, [tasks, segments]);
 
-  const addTask = async () => {
+  useEffect(() => {
+    setNewTaskSegment(activeSegment === 'All' || activeSegment === 'Today' ? 'All' : activeSegment);
+  }, [activeSegment]);
+
+  const addTask = async (e) => {
+    e.preventDefault();
     if (newTask.trim()) {
       setIsAddingTask(true);
-      await new Promise(resolve => setTimeout(resolve, 500)); // Simulating network delay
-      const now = new Date();
-      setTasks(prevTasks => ({
-        ...prevTasks,
-        [activeSegment]: [
-          ...(prevTasks[activeSegment] || []),
-          { 
-            id: Date.now(), 
-            text: newTask, 
-            completed: false, 
-            createdAt: now.toISOString(),
-            deadline: taskDeadline || null,
-            link: taskLink || null
-          }
-        ]
-      }));
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      const newTaskObj = {
+        id: Date.now(),
+        text: newTask,
+        completed: false,
+        createdAt: new Date().toISOString(),
+        deadline: null,
+        priority: newTaskPriority,
+        segment: newTaskSegment,
+        status: 'Todo',
+        subTasks: []
+      };
+      setTasks([newTaskObj, ...tasks]);
       setNewTask('');
-      setTaskDeadline('');
-      setTaskLink('');
+      setNewTaskPriority('low');
       setIsAddingTask(false);
     }
   };
 
   const toggleTask = (id) => {
-    setTasks(prevTasks => ({
-      ...prevTasks,
-      [activeSegment]: prevTasks[activeSegment].map(task => 
-        task.id === id ? { ...task, completed: !task.completed } : task
-      )
-    }));
+    setTasks(prevTasks => {
+      const updatedTasks = prevTasks.map(task =>
+        task.id === id ? { ...task, completed: !task.completed, status: task.completed ? 'Todo' : 'Done' } : task
+      );
+      return sortTasks(updatedTasks);
+    });
   };
 
   const deleteTask = (id) => {
-    setTasks(prevTasks => ({
-      ...prevTasks,
-      [activeSegment]: prevTasks[activeSegment].filter(task => task.id !== id)
-    }));
+    setTasks(tasks.filter(task => task.id !== id));
   };
 
-  const editTask = (id) => {
-    const taskToEdit = tasks[activeSegment].find(task => task.id === id);
-    setEditingTask(taskToEdit);
-    setNewTask(taskToEdit.text);
-    setTaskDeadline(taskToEdit.deadline || '');
-    setTaskLink(taskToEdit.link || '');
+  const setPriority = (id, priority) => {
+    setTasks(prevTasks => {
+      const updatedTasks = prevTasks.map(task =>
+        task.id === id ? { ...task, priority } : task
+      );
+      return sortTasks(updatedTasks);
+    });
   };
 
-  const updateTask = async () => {
-    if (editingTask && newTask.trim()) {
-      setIsAddingTask(true);
-      await new Promise(resolve => setTimeout(resolve, 500)); // Simulating network delay
-      setTasks(prevTasks => ({
-        ...prevTasks,
-        [activeSegment]: prevTasks[activeSegment].map(task =>
-          task.id === editingTask.id
-            ? { ...task, text: newTask, deadline: taskDeadline || null, link: taskLink || null }
-            : task
-        )
-      }));
-      setEditingTask(null);
-      setNewTask('');
-      setTaskDeadline('');
-      setTaskLink('');
-      setIsAddingTask(false);
-    }
+  const setDeadline = (id, deadline) => {
+    setTasks(prevTasks => {
+      const updatedTasks = prevTasks.map(task =>
+        task.id === id ? { ...task, deadline } : task
+      );
+      return sortTasks(updatedTasks);
+    });
   };
 
-  const addSegment = async () => {
-    if (newSegment.trim() && !segments.includes(newSegment)) {
-      setIsAddingSegment(true);
-      await new Promise(resolve => setTimeout(resolve, 500)); // Simulating network delay
-      setSegments([...segments, newSegment]);
-      setNewSegment('');
+  const setStatus = (id, status) => {
+    setTasks(prevTasks => {
+      const updatedTasks = prevTasks.map(task =>
+        task.id === id ? { ...task, status, completed: status === 'Done' } : task
+      );
+      return sortTasks(updatedTasks);
+    });
+  };
+
+  const addSegment = (newSegmentName) => {
+    if (newSegmentName && newSegmentName.trim() && !segments.includes(newSegmentName.trim())) {
+      setSegments(prevSegments => [...prevSegments, newSegmentName.trim()]);
       setIsAddingSegment(false);
     }
   };
 
+  const editSegment = (oldName, newName) => {
+    if (newName && newName.trim() && !segments.includes(newName.trim())) {
+      setSegments(segments.map(seg => seg === oldName ? newName.trim() : seg));
+      setTasks(tasks.map(task => task.segment === oldName ? { ...task, segment: newName.trim() } : task));
+      setEditingSegment(null);
+    }
+  };
+
   const deleteSegment = (segment) => {
-    setSegments(segments.filter(s => s !== segment));
+    setSegments(segments.filter(seg => seg !== segment));
+    setTasks(tasks.map(task => task.segment === segment ? { ...task, segment: 'All' } : task));
+    setDeletingSegment(null);
+  };
+
+  const moveTask = (taskId, newSegment) => {
     setTasks(prevTasks => {
-      const { [segment]: _, ...rest } = prevTasks;
-      return rest;
+      const updatedTasks = prevTasks.map(task =>
+        task.id === taskId ? { ...task, segment: newSegment } : task
+      );
+      return sortTasks(updatedTasks);
     });
-    if (activeSegment === segment) {
-      setActiveSegment(segments[0]);
+    setMovingTask(null);
+  };
+
+  const addSubTask = (taskId, subTaskText) => {
+    setTasks(prevTasks => {
+      const updatedTasks = prevTasks.map(task =>
+        task.id === taskId ? {
+          ...task,
+          subTasks: [...(task.subTasks || []), {
+            id: Date.now(),
+            text: subTaskText,
+            completed: false,
+            deadline: null,
+            priority: 'low',
+            status: 'Todo'
+          }]
+        } : task
+      );
+      return sortTasks(updatedTasks);
+    });
+  };
+
+  const toggleSubTask = (taskId, subTaskId) => {
+    setTasks(prevTasks => {
+      const updatedTasks = prevTasks.map(task =>
+        task.id === taskId ? {
+          ...task,
+          subTasks: (task.subTasks || []).map(subTask =>
+            subTask.id === subTaskId ? { ...subTask, completed: !subTask.completed, status: subTask.completed ? 'Todo' : 'Done' } : subTask
+          )
+        } : task
+      );
+      return sortTasks(updatedTasks);
+    });
+  };
+
+  const setSubTaskDeadline = (taskId, subTaskId, deadline) => {
+    setTasks(prevTasks => {
+      const updatedTasks = prevTasks.map(task =>
+        task.id === taskId ? {
+          ...task,
+          subTasks: (task.subTasks || []).map(subTask =>
+            subTask.id === subTaskId ? { ...subTask, deadline } : subTask
+          )
+        } : task
+      );
+      return sortTasks(updatedTasks);
+    });
+  };
+
+  const setSubTaskPriority = (taskId, subTaskId, priority) => {
+    setTasks(prevTasks => {
+      const updatedTasks = prevTasks.map(task =>
+        task.id === taskId ? {
+          ...task,
+          subTasks: (task.subTasks || []).map(subTask =>
+            subTask.id === subTaskId ? { ...subTask, priority } : subTask
+          )
+        } : task
+      );
+      return sortTasks(updatedTasks);
+    });
+  };
+
+  const setSubTaskStatus = (taskId, subTaskId, status) => {
+    setTasks(prevTasks => {
+      const updatedTasks = prevTasks.map(task =>
+        task.id === taskId ? {
+          ...task,
+          subTasks: (task.subTasks || []).map(subTask =>
+            subTask.id === subTaskId ? { ...subTask, status, completed: status === 'Done' } : subTask
+          )
+        } : task
+      );
+      return sortTasks(updatedTasks);
+    });
+  };
+
+  const deleteSubTask = (taskId, subTaskId) => {
+    setTasks(prevTasks => {
+      const updatedTasks = prevTasks.map(task =>
+        task.id === taskId ? {
+          ...task,
+          subTasks: (task.subTasks || []).filter(subTask => subTask.id !== subTaskId)
+        } : task
+      );
+      return sortTasks(updatedTasks);
+    });
+  };
+
+  const sortTasks = (tasksToSort) => {
+    return tasksToSort.sort((a, b) => {
+      if (a.completed && !b.completed) return 1;
+      if (!a.completed && b.completed) return -1;
+      return 0;
+    });
+  };
+
+  const filteredTasks = tasks.filter(task => {
+    if (activeSegment === 'All') return true;
+    if (activeSegment === 'Today') {
+      const today = new Date().toISOString().split('T')[0];
+      return (
+        task.deadline?.split('T')[0] === today ||
+        (task.subTasks && task.subTasks.some(subTask => subTask.deadline?.split('T')[0] === today))
+      );
     }
-  };
-
-  const moveSegment = (index, direction) => {
-    const newSegments = [...segments];
-    const newIndex = index + direction;
-    [newSegments[index], newSegments[newIndex]] = [newSegments[newIndex], newSegments[index]];
-    setSegments(newSegments);
-  };
-
-  const handleKeyPress = (e, action) => {
-    if (e.key === 'Enter') {
-      action();
-    }
-  };
-
-  const groupTasksByDate = (tasks) => {
-    const grouped = tasks.reduce((acc, task) => {
-      const date = new Date(task.createdAt).toDateString();
-      if (!acc[date]) {
-        acc[date] = [];
-      }
-      acc[date].push(task);
-      return acc;
-    }, {});
-    return Object.entries(grouped).sort(([a], [b]) => new Date(b) - new Date(a));
-  };
-
-  const totalTasks = Object.values(tasks).flat().length;
-  const completedTasks = Object.values(tasks).flat().filter(task => task.completed).length;
-  const openTasks = totalTasks - completedTasks;
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-400 to-indigo-600 flex items-center justify-center">
-        <Loader className="w-12 h-12 text-white animate-spin" />
-      </div>
-    );
-  }
+    return task.segment === activeSegment;
+  });
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-400 to-indigo-600 flex flex-col items-center justify-between p-4 sm:p-6 font-sans">
-      <div className="bg-white bg-opacity-20 backdrop-blur-lg rounded-3xl shadow-xl p-4 sm:p-8 w-full max-w-4xl">
-        <h1 className="text-3xl sm:text-4xl font-bold text-white mb-6 sm:mb-8 text-center font-serif">Get Shit Done 🤝</h1>
-        
-        {/* Summary Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-          <div className="bg-white bg-opacity-20 rounded-xl p-4 text-white text-center">
-            <h3 className="font-bold">Segments</h3>
-            <p className="text-xl sm:text-2xl">{segments.length}</p>
-          </div>
-          <div className="bg-white bg-opacity-20 rounded-xl p-4 text-white text-center">
-            <h3 className="font-bold">Open Tasks</h3>
-            <p className="text-xl sm:text-2xl">{openTasks}</p>
-          </div>
-          <div className="bg-white bg-opacity-20 rounded-xl p-4 text-white text-center">
-            <h3 className="font-bold">Completed Tasks</h3>
-            <p className="text-xl sm:text-2xl">{completedTasks}</p>
-          </div>
-        </div>
-
-        {/* Segment management */}
-        <SegmentManagement
-          segments={segments}
-          activeSegment={activeSegment}
-          setActiveSegment={setActiveSegment}
-          moveSegment={moveSegment}
-          deleteSegment={deleteSegment}
-          addSegment={addSegment}
-          isAddingSegment={isAddingSegment}
-          newSegment={newSegment}
-          setNewSegment={setNewSegment}
-          handleKeyPress={handleKeyPress}
-        />
-
-        {/* Add Task Title */}
-        <h2 className="text-lg sm:text-xl font-semibold text-white mb-3 mt-6">Add Task</h2>
-
-        {/* Task input */}
-        <div className="mb-6 bg-white bg-opacity-20 rounded-2xl p-2 flex flex-col sm:flex-row items-stretch sm:items-center">
-          <input
-            type="text"
-            value={newTask}
-            onChange={(e) => setNewTask(e.target.value)}
-            onKeyPress={(e) => handleKeyPress(e, editingTask ? updateTask : addTask)}
-            placeholder="Add a new task..."
-            className="flex-grow px-4 py-2 mb-2 sm:mb-0 bg-transparent text-white placeholder-gray-300 focus:outline-none"
+    <div className="min-h-screen bg-gradient-to-r from-blue-500 to-purple-600 p-4">
+      <div className="max-w-8xl mx-auto bg-white rounded-xl shadow-lg overflow-hidden h-[calc(100vh-2rem)]">
+        <div className="flex h-full">
+          <Sidebar
+            segments={segments}
+            activeSegment={activeSegment}
+            setActiveSegment={setActiveSegment}
+            setEditingSegment={setEditingSegment}
+            setDeletingSegment={setDeletingSegment}
+            setIsAddingSegment={setIsAddingSegment}
           />
-          <input
-            type="url"
-            value={taskLink}
-            onChange={(e) => setTaskLink(e.target.value)}
-            placeholder="Add a link (optional)"
-            className="px-4 py-2 mb-2 sm:mb-0 bg-transparent text-white placeholder-gray-300 focus:outline-none"
-          />
-          <div className="flex items-center bg-white bg-opacity-20 rounded-full px-4 py-2 mb-2 sm:mb-0 sm:mr-2">
-            <Calendar className="text-white mr-2 w-5 h-5" />
-            <input
-              type="date"
-              value={taskDeadline}
-              onChange={(e) => setTaskDeadline(e.target.value)}
-              className="bg-transparent text-white focus:outline-none"
-              style={{ colorScheme: 'dark' }}
-            />
-          </div>
-          <button
-            onClick={editingTask ? updateTask : addTask}
-            disabled={isAddingTask}
-            className="w-full sm:w-auto bg-white bg-opacity-20 hover:bg-opacity-30 transition-colors p-2 rounded-full flex items-center justify-center"
-          >
-            {isAddingTask ? (
-              <Loader className="text-white w-6 h-6 animate-spin" />
-            ) : editingTask ? (
-              <Edit2 className="text-white w-6 h-6" />
+          <div className="w-3/4 p-8 flex flex-col h-full">
+            {activeSegment === 'Today' ? (
+              <TodayView
+                allTasks={tasks}
+                toggleTask={toggleTask}
+                deleteTask={deleteTask}
+                setPriority={setPriority}
+                setDeadline={setDeadline}
+                setStatus={setStatus}
+                toggleSubTask={toggleSubTask}
+                setSubTaskDeadline={setSubTaskDeadline}
+                setSubTaskPriority={setSubTaskPriority}
+                setSubTaskStatus={setSubTaskStatus}
+                deleteSubTask={deleteSubTask}
+              />
             ) : (
-              <PlusCircle className="text-white w-6 h-6" />
-            )}
-          </button>
-        </div>
-
-        {/* Task list */}
-        <div className="space-y-6">
-          {groupTasksByDate(tasks[activeSegment] || []).map(([date, dateTasks]) => (
-            <div key={date}>
-              <h3 className="text-white font-semibold mb-2">{new Date(date).toLocaleDateString()}</h3>
-              <ul className="space-y-2">
-                {dateTasks.map(task => (
-                  <li key={task.id} className="flex flex-wrap items-center bg-white bg-opacity-10 rounded-xl px-4 py-2 transition-all duration-300 hover:bg-opacity-20">
-                    <button onClick={() => toggleTask(task.id)} className="mr-3 transition-transform duration-300 hover:scale-110">
-                      <CheckCircle className={`${task.completed ? 'text-green-400' : 'text-white'}`} />
+              <>
+                <form onSubmit={addTask} className="mb-8">
+                  <div className="flex items-center bg-gray-100 rounded-lg p-3 shadow-sm">
+                    <input
+                      type="text"
+                      value={newTask}
+                      onChange={(e) => setNewTask(e.target.value)}
+                      placeholder="What do you need to accomplish?"
+                      className="flex-grow bg-transparent focus:outline-none text-gray-800 placeholder-gray-500 text-lg"
+                    />
+                    <select
+                      value={newTaskPriority}
+                      onChange={(e) => setNewTaskPriority(e.target.value)}
+                      className="mx-2 bg-white text-gray-500 px-4 py-2 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="low">Low Priority</option>
+                      <option value="medium">Medium Priority</option>
+                      <option value="high">High Priority</option>
+                    </select>
+                    <select
+                      value={newTaskSegment}
+                      onChange={(e) => setNewTaskSegment(e.target.value)}
+                      className="mx-2 bg-white text-gray-500 px-4 py-2 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="All">All</option>
+                      {segments.map(segment => (
+                        <option key={segment} value={segment}>{segment}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="submit"
+                      disabled={isAddingTask}
+                      className="ml-2 bg-blue-500 text-white p-2 rounded-full hover:bg-blue-600 transition-colors duration-300 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
+                    >
+                      {isAddingTask ? (
+                        <Loader className="w-6 h-6 animate-spin" />
+                      ) : (
+                        <PlusCircle className="w-6 h-6" />
+                      )}
                     </button>
-                    <span className={`flex-grow text-white ${task.completed ? 'line-through' : ''} mb-2 sm:mb-0`}>
-                      {task.text}
-                    </span>
-                    <div className="w-full sm:w-auto flex flex-wrap items-center justify-end space-x-2 mt-2 sm:mt-0">
-                      {task.deadline && (
-                        <span className="text-xs text-gray-300">
-                          Due: {new Date(task.deadline).toLocaleDateString()}
-                        </span>
-                      )}
-                      {task.link && (
-                        <a
-                          href={task.link}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="bg-white bg-opacity-20 text-white text-xs px-2 py-1 rounded-full hover:bg-opacity-30 transition-colors"
-                        >
-                          <Link className="w-3 h-3 inline mr-1" />
-                          Link
-                        </a>
-                      )}
-                      <button onClick={() => editTask(task.id)} className="transition-transform duration-300 hover:scale-110">
-                        <Edit2 className="text-white w-4 h-4" />
-                      </button>
-                      <button onClick={() => deleteTask(task.id)} className="transition-transform duration-300 hover:scale-110">
-                        <Trash2 className="text-pink-300 hover:text-pink-100 transition-colors w-4 h-4" />
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
+                  </div>
+                </form>
+
+                <TaskList
+                  tasks={filteredTasks}
+                  toggleTask={toggleTask}
+                  deleteTask={deleteTask}
+                  setPriority={setPriority}
+                  setDeadline={setDeadline}
+                  setStatus={setStatus}
+                  setMovingTask={setMovingTask}
+                  addSubTask={addSubTask}
+                  toggleSubTask={toggleSubTask}
+                  setSubTaskDeadline={setSubTaskDeadline}
+                  setSubTaskPriority={setSubTaskPriority}
+                  setSubTaskStatus={setSubTaskStatus}
+                  deleteSubTask={deleteSubTask}
+                />
+              </>
+            )}
+          </div>
         </div>
       </div>
-      <footer className="text-sm mt-8 text-white text-center font-sans font-light">
-        Made with 🤍 (and Laziness).
-      </footer>
+
+      {(editingSegment || isAddingSegment) && (
+        <AddEditSegmentModal
+          segment={editingSegment}
+          onSave={(oldName, newName) => {
+            if (editingSegment) {
+              editSegment(oldName, newName);
+            } else {
+              addSegment(newName);
+            }
+          }}
+          onClose={() => {
+            setEditingSegment(null);
+            setIsAddingSegment(false);
+          }}
+        />
+      )}
+
+      {deletingSegment && (
+        <DeleteSegmentModal
+          segment={deletingSegment}
+          onDelete={deleteSegment}
+          onClose={() => setDeletingSegment(null)}
+        />
+      )}
+
+      {movingTask && (
+        <MoveTaskModal
+          segments={segments}
+          onMove={moveTask}
+          onClose={() => setMovingTask(null)}
+          taskId={movingTask}
+        />
+      )}
     </div>
   );
 };
