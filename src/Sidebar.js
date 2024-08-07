@@ -1,5 +1,5 @@
 import React from 'react';
-import { Inbox, Sun, Tag, PlusCircle, Edit, Trash2 } from 'lucide-react';
+import { Inbox, Sun, Tag, PlusCircle, Edit, Trash2, Settings } from 'lucide-react';
 
 const Sidebar = ({ 
   segments, 
@@ -7,7 +7,8 @@ const Sidebar = ({
   setActiveSegment, 
   setEditingSegment, 
   setDeletingSegment, 
-  setIsAddingSegment
+  setIsAddingSegment,
+  openSettings
 }) => {
   return (
     <div className="w-1/4 bg-gray-100 p-6 flex flex-col h-full">
@@ -87,13 +88,20 @@ const Sidebar = ({
           </div>
         </div>
       </div>
-      <div className="mt-6">
+      <div className="mt-6 space-y-2">
         <button
           onClick={() => setIsAddingSegment(true)}
           className="w-full bg-blue-500 text-white px-4 py-3 rounded-lg hover:bg-blue-600 transition-colors duration-300 flex items-center justify-center shadow-sm"
         >
           <PlusCircle className="w-5 h-5 mr-2" />
           Add Segment
+        </button>
+        <button
+          onClick={openSettings}
+          className="w-full bg-gray-200 text-gray-700 px-4 py-3 rounded-lg hover:bg-gray-300 transition-colors duration-300 flex items-center justify-center shadow-sm"
+        >
+          <Settings className="w-5 h-5 mr-2" />
+          Settings
         </button>
       </div>
     </div>

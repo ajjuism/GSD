@@ -45,20 +45,20 @@ const MoveTaskModal = ({ segments, onMove, onClose, taskId }) => {
             onClick={handleMove}
             disabled={!selectedSegment || isMoving}
             className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center"
-          >
-            {isMoving ? (
-              <>
-                <Loader className="w-4 h-4 mr-2 animate-spin" />
-                Moving...
-              </>
-            ) : (
-              'Move'
-            )}
-          </button>
+            >
+              {isMoving ? (
+                <>
+                  <Loader className="w-4 h-4 mr-2 animate-spin" />
+                  Moving...
+                </>
+              ) : (
+                'Move'
+              )}
+            </button>
+          </div>
         </div>
       </div>
-    </div>
-  );
-};
-
-export default MoveTaskModal;
+    );
+  };
+  
+  export default MoveTaskModal;

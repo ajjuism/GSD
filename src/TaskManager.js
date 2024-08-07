@@ -7,32 +7,12 @@ import AddEditSegmentModal from './AddEditSegmentModal';
 import DeleteSegmentModal from './DeleteSegmentModal';
 import MoveTaskModal from './MoveTaskModal';
 import EditTaskModal from './EditTaskModal';
+import { db } from './firebase';
+import { collection, doc, setDoc, getDocs, deleteDoc, query, where } from 'firebase/firestore';
 
-const TaskManager = () => {
-  const [tasks, setTasks] = useState(() => {
-    try {
-      const savedTasks = localStorage.getItem('tasks');
-      const parsedTasks = savedTasks ? JSON.parse(savedTasks) : [];
-      return Array.isArray(parsedTasks) ? parsedTasks : [];
-    } catch (error) {
-      console.error('Error parsing tasks from localStorage:', error);
-      return [];
-    }
-  });
-
-  const [segments, setSegments] = useState(() => {
-    try {
-      const savedSegments = localStorage.getItem('segments');
-      const parsedSegments = savedSegments ? JSON.parse(savedSegments) : ['Personal', 'Work'];
-      return Array.isArray(parsedSegments) 
-        ? parsedSegments.map(seg => typeof seg === 'string' ? seg : (seg.name || 'Unnamed Segment'))
-        : ['Personal', 'Work'];
-    } catch (error) {
-      console.error('Error parsing segments from localStorage:', error);
-      return ['Personal', 'Work'];
-    }
-  });
-
+const TaskManager = ({ user, openSettings }) => {
+  const [tasks, setTasks] = useState([]);
+  const [segments, setSegments] = useState(['Personal', 'Work']);
   const [activeSegment, setActiveSegment] = useState('All');
   const [newTask, setNewTask] = useState('');
   const [newTaskSegment, setNewTaskSegment] = useState('All');
@@ -46,9 +26,24 @@ const TaskManager = () => {
   const [editingSubTask, setEditingSubTask] = useState({ taskId: null, subTaskId: null });
 
   useEffect(() => {
-    localStorage.setItem('tasks', JSON.stringify(tasks));
-    localStorage.setItem('segments', JSON.stringify(segments));
-  }, [tasks, segments]);
+    const loadTasks = async () => {
+      const q = query(collection(db, 'tasks'), where('userId', '==', user.uid));
+      const querySnapshot = await getDocs(q);
+      const loadedTasks = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setTasks(loadedTasks);
+    };
+    loadTasks();
+  }, [user.uid]);
+
+  useEffect(() => {
+    const loadSegments = async () => {
+      const q = query(collection(db, 'segments'), where('userId', '==', user.uid));
+      const querySnapshot = await getDocs(q);
+      const loadedSegments = querySnapshot.docs.map(doc => doc.data().name);
+      setSegments(loadedSegments.length > 0 ? loadedSegments : ['Personal', 'Work']);
+    };
+    loadSegments();
+  }, [user.uid]);
 
   useEffect(() => {
     setNewTaskSegment(activeSegment === 'All' || activeSegment === 'Today' ? 'All' : activeSegment);
@@ -58,9 +53,8 @@ const TaskManager = () => {
     e.preventDefault();
     if (newTask.trim()) {
       setIsAddingTask(true);
-      await new Promise(resolve => setTimeout(resolve, 1000));
       const newTaskObj = {
-        id: Date.now(),
+        id: Date.now().toString(),
         text: newTask,
         completed: false,
         createdAt: new Date().toISOString(),
@@ -68,8 +62,10 @@ const TaskManager = () => {
         priority: newTaskPriority,
         segment: newTaskSegment,
         status: 'Todo',
-        subTasks: []
+        subTasks: [],
+        userId: user.uid
       };
+      await setDoc(doc(db, 'tasks', newTaskObj.id), newTaskObj);
       setTasks([newTaskObj, ...tasks]);
       setNewTask('');
       setNewTaskPriority('low');
@@ -77,159 +73,218 @@ const TaskManager = () => {
     }
   };
 
-  const toggleTask = (id) => {
+  const toggleTask = async (id) => {
+    const taskToUpdate = tasks.find(task => task.id === id);
+    const updatedTask = { 
+      ...taskToUpdate, 
+      completed: !taskToUpdate.completed, 
+      status: taskToUpdate.completed ? 'Todo' : 'Done' 
+    };
+    await setDoc(doc(db, 'tasks', id), updatedTask);
     setTasks(prevTasks => {
       const updatedTasks = prevTasks.map(task =>
-        task.id === id ? { ...task, completed: !task.completed, status: task.completed ? 'Todo' : 'Done' } : task
+        task.id === id ? updatedTask : task
       );
       return sortTasks(updatedTasks);
     });
   };
 
-  const deleteTask = (id) => {
+  const deleteTask = async (id) => {
+    await deleteDoc(doc(db, 'tasks', id));
     setTasks(tasks.filter(task => task.id !== id));
   };
 
-  const setPriority = (id, priority) => {
+  const setPriority = async (id, priority) => {
+    const taskToUpdate = tasks.find(task => task.id === id);
+    const updatedTask = { ...taskToUpdate, priority };
+    await setDoc(doc(db, 'tasks', id), updatedTask);
     setTasks(prevTasks => {
       const updatedTasks = prevTasks.map(task =>
-        task.id === id ? { ...task, priority } : task
+        task.id === id ? updatedTask : task
       );
       return sortTasks(updatedTasks);
     });
   };
 
-  const setDeadline = (id, deadline) => {
+  const setDeadline = async (id, deadline) => {
+    const taskToUpdate = tasks.find(task => task.id === id);
+    const updatedTask = { ...taskToUpdate, deadline };
+    await setDoc(doc(db, 'tasks', id), updatedTask);
     setTasks(prevTasks => {
       const updatedTasks = prevTasks.map(task =>
-        task.id === id ? { ...task, deadline } : task
+        task.id === id ? updatedTask : task
       );
       return sortTasks(updatedTasks);
     });
   };
 
-  const setStatus = (id, status) => {
+  const setStatus = async (id, status) => {
+    const taskToUpdate = tasks.find(task => task.id === id);
+    const updatedTask = { ...taskToUpdate, status, completed: status === 'Done' };
+    await setDoc(doc(db, 'tasks', id), updatedTask);
     setTasks(prevTasks => {
       const updatedTasks = prevTasks.map(task =>
-        task.id === id ? { ...task, status, completed: status === 'Done' } : task
+        task.id === id ? updatedTask : task
       );
       return sortTasks(updatedTasks);
     });
   };
 
-  const addSegment = (newSegmentName) => {
+  const addSegment = async (newSegmentName) => {
     if (newSegmentName && newSegmentName.trim() && !segments.includes(newSegmentName.trim())) {
+      const newSegment = { name: newSegmentName.trim(), userId: user.uid };
+      await setDoc(doc(db, 'segments', Date.now().toString()), newSegment);
       setSegments(prevSegments => [...prevSegments, newSegmentName.trim()]);
       setIsAddingSegment(false);
     }
   };
 
-  const editSegment = (oldName, newName) => {
+  const editSegment = async (oldName, newName) => {
     if (newName && newName.trim() && !segments.includes(newName.trim())) {
+      const q = query(collection(db, 'segments'), where('name', '==', oldName), where('userId', '==', user.uid));
+      const querySnapshot = await getDocs(q);
+      querySnapshot.forEach(async (document) => {
+        await setDoc(doc(db, 'segments', document.id), { name: newName.trim(), userId: user.uid });
+      });
+      
       setSegments(segments.map(seg => seg === oldName ? newName.trim() : seg));
+      
+      // Update tasks with the new segment name
+      const tasksToUpdate = tasks.filter(task => task.segment === oldName);
+      for (const task of tasksToUpdate) {
+        const updatedTask = { ...task, segment: newName.trim() };
+        await setDoc(doc(db, 'tasks', task.id), updatedTask);
+      }
       setTasks(tasks.map(task => task.segment === oldName ? { ...task, segment: newName.trim() } : task));
       setEditingSegment(null);
     }
   };
 
-  const deleteSegment = (segment) => {
+  const deleteSegment = async (segment) => {
+    const q = query(collection(db, 'segments'), where('name', '==', segment), where('userId', '==', user.uid));
+    const querySnapshot = await getDocs(q);
+    querySnapshot.forEach(async (document) => {
+      await deleteDoc(doc(db, 'segments', document.id));
+    });
+    
     setSegments(segments.filter(seg => seg !== segment));
+    
+    // Update tasks with the deleted segment to 'All'
+    const tasksToUpdate = tasks.filter(task => task.segment === segment);
+    for (const task of tasksToUpdate) {
+      const updatedTask = { ...task, segment: 'All' };
+      await setDoc(doc(db, 'tasks', task.id), updatedTask);
+    }
     setTasks(tasks.map(task => task.segment === segment ? { ...task, segment: 'All' } : task));
     setDeletingSegment(null);
   };
 
-  const moveTask = (taskId, newSegment) => {
+  const moveTask = async (taskId, newSegment) => {
+    const taskToUpdate = tasks.find(task => task.id === taskId);
+    const updatedTask = { ...taskToUpdate, segment: newSegment };
+    await setDoc(doc(db, 'tasks', taskId), updatedTask);
     setTasks(prevTasks => {
       const updatedTasks = prevTasks.map(task =>
-        task.id === taskId ? { ...task, segment: newSegment } : task
+        task.id === taskId ? updatedTask : task
       );
       return sortTasks(updatedTasks);
     });
     setMovingTask(null);
   };
 
-  const addSubTask = (taskId, subTaskText) => {
+  const addSubTask = async (taskId, subTaskText) => {
+    const taskToUpdate = tasks.find(task => task.id === taskId);
+    const newSubTask = {
+      id: Date.now().toString(),
+      text: subTaskText,
+      completed: false,
+      deadline: null,
+      priority: 'low',
+      status: 'Todo'
+    };
+    const updatedTask = {
+      ...taskToUpdate,
+      subTasks: [...(taskToUpdate.subTasks || []), newSubTask]
+    };
+    await setDoc(doc(db, 'tasks', taskId), updatedTask);
     setTasks(prevTasks => {
       const updatedTasks = prevTasks.map(task =>
-        task.id === taskId ? {
-          ...task,
-          subTasks: [...(task.subTasks || []), {
-            id: Date.now(),
-            text: subTaskText,
-            completed: false,
-            deadline: null,
-            priority: 'low',
-            status: 'Todo'
-          }]
-        } : task
+        task.id === taskId ? updatedTask : task
       );
       return sortTasks(updatedTasks);
     });
   };
 
-  const toggleSubTask = (taskId, subTaskId) => {
+  const toggleSubTask = async (taskId, subTaskId) => {
+    const taskToUpdate = tasks.find(task => task.id === taskId);
+    const updatedSubTasks = taskToUpdate.subTasks.map(subTask =>
+      subTask.id === subTaskId
+        ? { ...subTask, completed: !subTask.completed, status: subTask.completed ? 'Todo' : 'Done' }
+        : subTask
+    );
+    const updatedTask = { ...taskToUpdate, subTasks: updatedSubTasks };
+    await setDoc(doc(db, 'tasks', taskId), updatedTask);
     setTasks(prevTasks => {
       const updatedTasks = prevTasks.map(task =>
-        task.id === taskId ? {
-          ...task,
-          subTasks: (task.subTasks || []).map(subTask =>
-            subTask.id === subTaskId ? { ...subTask, completed: !subTask.completed, status: subTask.completed ? 'Todo' : 'Done' } : subTask
-          )
-        } : task
+        task.id === taskId ? updatedTask : task
       );
       return sortTasks(updatedTasks);
     });
   };
 
-  const setSubTaskDeadline = (taskId, subTaskId, deadline) => {
+  const setSubTaskDeadline = async (taskId, subTaskId, deadline) => {
+    const taskToUpdate = tasks.find(task => task.id === taskId);
+    const updatedSubTasks = taskToUpdate.subTasks.map(subTask =>
+      subTask.id === subTaskId ? { ...subTask, deadline } : subTask
+    );
+    const updatedTask = { ...taskToUpdate, subTasks: updatedSubTasks };
+    await setDoc(doc(db, 'tasks', taskId), updatedTask);
     setTasks(prevTasks => {
       const updatedTasks = prevTasks.map(task =>
-        task.id === taskId ? {
-          ...task,
-          subTasks: (task.subTasks || []).map(subTask =>
-            subTask.id === subTaskId ? { ...subTask, deadline } : subTask
-          )
-        } : task
+        task.id === taskId ? updatedTask : task
       );
       return sortTasks(updatedTasks);
     });
   };
 
-  const setSubTaskPriority = (taskId, subTaskId, priority) => {
+  const setSubTaskPriority = async (taskId, subTaskId, priority) => {
+    const taskToUpdate = tasks.find(task => task.id === taskId);
+    const updatedSubTasks = taskToUpdate.subTasks.map(subTask =>
+      subTask.id === subTaskId ? { ...subTask, priority } : subTask
+    );
+    const updatedTask = { ...taskToUpdate, subTasks: updatedSubTasks };
+    await setDoc(doc(db, 'tasks', taskId), updatedTask);
     setTasks(prevTasks => {
       const updatedTasks = prevTasks.map(task =>
-        task.id === taskId ? {
-          ...task,
-          subTasks: (task.subTasks || []).map(subTask =>
-            subTask.id === subTaskId ? { ...subTask, priority } : subTask
-          )
-        } : task
+        task.id === taskId ? updatedTask : task
       );
       return sortTasks(updatedTasks);
     });
   };
 
-  const setSubTaskStatus = (taskId, subTaskId, status) => {
+  const setSubTaskStatus = async (taskId, subTaskId, status) => {
+    const taskToUpdate = tasks.find(task => task.id === taskId);
+    const updatedSubTasks = taskToUpdate.subTasks.map(subTask =>
+      subTask.id === subTaskId ? { ...subTask, status, completed: status === 'Done' } : subTask
+    );
+    const updatedTask = { ...taskToUpdate, subTasks: updatedSubTasks };
+    await setDoc(doc(db, 'tasks', taskId), updatedTask);
     setTasks(prevTasks => {
       const updatedTasks = prevTasks.map(task =>
-        task.id === taskId ? {
-          ...task,
-          subTasks: (task.subTasks || []).map(subTask =>
-            subTask.id === subTaskId ? { ...subTask, status, completed: status === 'Done' } : subTask
-          )
-        } : task
+        task.id === taskId ? updatedTask : task
       );
       return sortTasks(updatedTasks);
     });
   };
 
-  const deleteSubTask = (taskId, subTaskId) => {
+  const deleteSubTask = async (taskId, subTaskId) => {
+    const taskToUpdate = tasks.find(task => task.id === taskId);
+    const updatedSubTasks = taskToUpdate.subTasks.filter(subTask => subTask.id !== subTaskId);
+    const updatedTask = { ...taskToUpdate, subTasks: updatedSubTasks };
+    await setDoc(doc(db, 'tasks', taskId), updatedTask);
     setTasks(prevTasks => {
       const updatedTasks = prevTasks.map(task =>
-        task.id === taskId ? {
-          ...task,
-          subTasks: (task.subTasks || []).filter(subTask => subTask.id !== subTaskId)
-        } : task
+        task.id === taskId ? updatedTask : task
       );
       return sortTasks(updatedTasks);
     });
@@ -246,25 +301,28 @@ const TaskManager = () => {
     setEditingSubTask({ taskId, subTaskId, ...subTaskToEdit });
   };
 
-  const saveEditedTask = (taskId, editedTaskData) => {
+  const saveEditedTask = async (taskId, editedTaskData) => {
+    const updatedTask = { ...tasks.find(task => task.id === taskId), ...editedTaskData };
+    await setDoc(doc(db, 'tasks', taskId), updatedTask);
     setTasks(prevTasks => {
       const updatedTasks = prevTasks.map(task =>
-        task.id === taskId ? { ...task, ...editedTaskData } : task
+        task.id === taskId ? updatedTask : task
       );
       return sortTasks(updatedTasks);
     });
     setEditingTask(null);
   };
 
-  const saveEditedSubTask = (taskId, subTaskId, editedSubTaskData) => {
+  const saveEditedSubTask = async (taskId, subTaskId, editedSubTaskData) => {
+    const taskToUpdate = tasks.find(task => task.id === taskId);
+    const updatedSubTasks = taskToUpdate.subTasks.map(subTask =>
+      subTask.id === subTaskId ? { ...subTask, ...editedSubTaskData } : subTask
+    );
+    const updatedTask = { ...taskToUpdate, subTasks: updatedSubTasks };
+    await setDoc(doc(db, 'tasks', taskId), updatedTask);
     setTasks(prevTasks => {
       const updatedTasks = prevTasks.map(task =>
-        task.id === taskId ? {
-          ...task,
-          subTasks: task.subTasks.map(subTask =>
-            subTask.id === subTaskId ? { ...subTask, ...editedSubTaskData } : subTask
-          )
-        } : task
+        task.id === taskId ? updatedTask : task
       );
       return sortTasks(updatedTasks);
     });
@@ -302,6 +360,7 @@ const TaskManager = () => {
             setEditingSegment={setEditingSegment}
             setDeletingSegment={setDeletingSegment}
             setIsAddingSegment={setIsAddingSegment}
+            openSettings={openSettings}
           />
           <div className="w-3/4 p-8 flex flex-col h-full">
             {activeSegment === 'Today' ? (
