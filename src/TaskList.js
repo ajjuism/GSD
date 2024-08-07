@@ -4,7 +4,7 @@ import { Check, Calendar, Clock, MoreHorizontal, ChevronDown, Loader, ClipboardL
 import DatePicker from 'react-datepicker';
 import "react-datepicker/dist/react-datepicker.css";
 
-const SubTaskItem = ({ subTask, onToggle, onSetDeadline, onSetPriority, onSetStatus, onDelete }) => {
+const SubTaskItem = ({ subTask, onToggle, onSetDeadline, onSetPriority, onSetStatus, onDelete, onEdit }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef(null);
 
@@ -47,14 +47,14 @@ const SubTaskItem = ({ subTask, onToggle, onSetDeadline, onSetPriority, onSetSta
         <div className={`px-2 py-1 rounded-full text-xs ${
           subTask.priority === 'high' ? 'bg-red-100 text-red-800' :
           subTask.priority === 'medium' ? 'bg-orange-100 text-orange-800' :
-          'bg-blue-100 text-blue-800'
+          'bg-green-100 text-green-800'
         }`}>
           {subTask.priority} Priority
         </div>
         {subTask.deadline && (
           <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full">
             Due: {new Date(subTask.deadline).toLocaleDateString()}
-          </span>
+            </span>
         )}
         <div className="relative">
           <select
@@ -91,6 +91,7 @@ const SubTaskItem = ({ subTask, onToggle, onSetDeadline, onSetPriority, onSetSta
                   className="w-full px-2 py-1 text-sm border rounded"
                 />
               </div>
+              <button onClick={() => onEdit(subTask.id)} className="block px-4 py-2 text-sm text-blue-600 hover:bg-gray-100 w-full text-left">Edit Sub-task</button>
               <button onClick={() => onDelete(subTask.id)} className="block px-4 py-2 text-sm text-red-600 hover:bg-gray-100 w-full text-left">Delete Sub-task</button>
             </div>
           </div>
@@ -100,7 +101,7 @@ const SubTaskItem = ({ subTask, onToggle, onSetDeadline, onSetPriority, onSetSta
   );
 };
 
-const TaskItem = ({ task, toggleTask, deleteTask, setPriority, setDeadline, setStatus, setMovingTask, addSubTask, toggleSubTask, setSubTaskDeadline, setSubTaskPriority, setSubTaskStatus, deleteSubTask }) => {
+const TaskItem = ({ task, toggleTask, deleteTask, setPriority, setDeadline, setStatus, setMovingTask, addSubTask, toggleSubTask, setSubTaskDeadline, setSubTaskPriority, setSubTaskStatus, deleteSubTask, editTask, editSubTask }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [newSubTask, setNewSubTask] = useState('');
@@ -228,6 +229,7 @@ const TaskItem = ({ task, toggleTask, deleteTask, setPriority, setDeadline, setS
                     />
                   </div>
                   <button onClick={() => setMovingTask(task.id)} className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left">Move to Segment</button>
+                  <button onClick={() => editTask(task.id)} className="block px-4 py-2 text-sm text-blue-600 hover:bg-gray-100 w-full text-left">Edit Task</button>
                   <button onClick={handleDelete} className="block px-4 py-2 text-sm text-red-600 hover:bg-gray-100 w-full text-left">Delete Task</button>
                 </div>
               </div>
@@ -272,6 +274,7 @@ const TaskItem = ({ task, toggleTask, deleteTask, setPriority, setDeadline, setS
                 onSetPriority={(subTaskId, priority) => setSubTaskPriority(task.id, subTaskId, priority)}
                 onSetStatus={(subTaskId, status) => setSubTaskStatus(task.id, subTaskId, status)}
                 onDelete={(subTaskId) => deleteSubTask(task.id, subTaskId)}
+                onEdit={(subTaskId) => editSubTask(task.id, subTaskId)}
               />
             ))}
             <form onSubmit={handleAddSubTask} className="mt-2 flex items-center">
@@ -296,7 +299,7 @@ const TaskItem = ({ task, toggleTask, deleteTask, setPriority, setDeadline, setS
   );
 };
 
-const TaskList = ({ tasks, toggleTask, deleteTask, setPriority, setDeadline, setStatus, setMovingTask, addSubTask, toggleSubTask, setSubTaskDeadline, setSubTaskPriority, setSubTaskStatus, deleteSubTask }) => {
+const TaskList = ({ tasks, toggleTask, deleteTask, setPriority, setDeadline, setStatus, setMovingTask, addSubTask, toggleSubTask, setSubTaskDeadline, setSubTaskPriority, setSubTaskStatus, deleteSubTask, editTask, editSubTask }) => {
   return (
     <div className="space-y-4 overflow-y-auto flex-grow">
       <AnimatePresence>
@@ -328,6 +331,8 @@ const TaskList = ({ tasks, toggleTask, deleteTask, setPriority, setDeadline, set
               setSubTaskPriority={setSubTaskPriority}
               setSubTaskStatus={setSubTaskStatus}
               deleteSubTask={deleteSubTask}
+              editTask={editTask}
+              editSubTask={editSubTask}
             />
           ))
         )}

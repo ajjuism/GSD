@@ -6,6 +6,7 @@ import TodayView from './TodayView';
 import AddEditSegmentModal from './AddEditSegmentModal';
 import DeleteSegmentModal from './DeleteSegmentModal';
 import MoveTaskModal from './MoveTaskModal';
+import EditTaskModal from './EditTaskModal';
 
 const TaskManager = () => {
   const [tasks, setTasks] = useState(() => {
@@ -41,6 +42,8 @@ const TaskManager = () => {
   const [movingTask, setMovingTask] = useState(null);
   const [isAddingSegment, setIsAddingSegment] = useState(false);
   const [isAddingTask, setIsAddingTask] = useState(false);
+  const [editingTask, setEditingTask] = useState(null);
+  const [editingSubTask, setEditingSubTask] = useState({ taskId: null, subTaskId: null });
 
   useEffect(() => {
     localStorage.setItem('tasks', JSON.stringify(tasks));
@@ -232,6 +235,42 @@ const TaskManager = () => {
     });
   };
 
+  const editTask = (taskId) => {
+    const taskToEdit = tasks.find(task => task.id === taskId);
+    setEditingTask(taskToEdit);
+  };
+
+  const editSubTask = (taskId, subTaskId) => {
+    const task = tasks.find(task => task.id === taskId);
+    const subTaskToEdit = task.subTasks.find(subTask => subTask.id === subTaskId);
+    setEditingSubTask({ taskId, subTaskId, ...subTaskToEdit });
+  };
+
+  const saveEditedTask = (taskId, editedTaskData) => {
+    setTasks(prevTasks => {
+      const updatedTasks = prevTasks.map(task =>
+        task.id === taskId ? { ...task, ...editedTaskData } : task
+      );
+      return sortTasks(updatedTasks);
+    });
+    setEditingTask(null);
+  };
+
+  const saveEditedSubTask = (taskId, subTaskId, editedSubTaskData) => {
+    setTasks(prevTasks => {
+      const updatedTasks = prevTasks.map(task =>
+        task.id === taskId ? {
+          ...task,
+          subTasks: task.subTasks.map(subTask =>
+            subTask.id === subTaskId ? { ...subTask, ...editedSubTaskData } : subTask
+          )
+        } : task
+      );
+      return sortTasks(updatedTasks);
+    });
+    setEditingSubTask({ taskId: null, subTaskId: null });
+  };
+
   const sortTasks = (tasksToSort) => {
     return tasksToSort.sort((a, b) => {
       if (a.completed && !b.completed) return 1;
@@ -278,6 +317,8 @@ const TaskManager = () => {
                 setSubTaskPriority={setSubTaskPriority}
                 setSubTaskStatus={setSubTaskStatus}
                 deleteSubTask={deleteSubTask}
+                editTask={editTask}
+                editSubTask={editSubTask}
               />
             ) : (
               <>
@@ -337,6 +378,8 @@ const TaskManager = () => {
                   setSubTaskPriority={setSubTaskPriority}
                   setSubTaskStatus={setSubTaskStatus}
                   deleteSubTask={deleteSubTask}
+                  editTask={editTask}
+                  editSubTask={editSubTask}
                 />
               </>
             )}
@@ -375,6 +418,22 @@ const TaskManager = () => {
           onMove={moveTask}
           onClose={() => setMovingTask(null)}
           taskId={movingTask}
+        />
+      )}
+
+      {editingTask && (
+        <EditTaskModal
+          task={editingTask}
+          onSave={saveEditedTask}
+          onClose={() => setEditingTask(null)}
+        />
+      )}
+
+      {editingSubTask.taskId && (
+        <EditTaskModal
+          task={editingSubTask}
+          onSave={(_, editedData) => saveEditedSubTask(editingSubTask.taskId, editingSubTask.subTaskId, editedData)}
+          onClose={() => setEditingSubTask({ taskId: null, subTaskId: null })}
         />
       )}
     </div>

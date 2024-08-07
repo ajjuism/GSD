@@ -14,7 +14,9 @@ const TodayView = ({
   setSubTaskDeadline,
   setSubTaskPriority,
   setSubTaskStatus,
-  deleteSubTask
+  deleteSubTask,
+  editTask,
+  editSubTask
 }) => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -38,8 +40,15 @@ const TodayView = ({
     return result;
   });
 
-  const completedItems = todayItems.filter(item => item.completed).length;
-  const incompleteItems = todayItems.filter(item => !item.completed).length;
+  // Sort tasks: incomplete tasks first, then completed tasks
+  const sortedTodayItems = todayItems.sort((a, b) => {
+    if (a.completed && !b.completed) return 1;
+    if (!a.completed && b.completed) return -1;
+    return 0;
+  });
+
+  const completedItems = sortedTodayItems.filter(item => item.completed).length;
+  const incompleteItems = sortedTodayItems.filter(item => !item.completed).length;
 
   const TaskItem = ({ item }) => {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -95,6 +104,14 @@ const TodayView = ({
         deleteTask(item.id);
       } else {
         deleteSubTask(item.parentTask.id, item.id);
+      }
+    };
+
+    const handleEdit = () => {
+      if (item.isMainTask) {
+        editTask(item.id);
+      } else {
+        editSubTask(item.parentTask.id, item.id);
       }
     };
 
@@ -159,6 +176,7 @@ const TodayView = ({
                         className="w-full px-2 py-1 text-sm border rounded"
                       />
                     </div>
+                    <button onClick={handleEdit} className="block px-4 py-2 text-sm text-blue-600 hover:bg-gray-100 w-full text-left">Edit</button>
                     <button onClick={handleDelete} className="block px-4 py-2 text-sm text-red-600 hover:bg-gray-100 w-full text-left">Delete</button>
                   </div>
                 </div>
@@ -198,7 +216,7 @@ const TodayView = ({
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 text-gray-600">
         <SummaryCard
           title="Total Tasks"
-          value={todayItems.length}
+          value={sortedTodayItems.length}
           icon={<Clock className="w-8 h-8 text-blue-400" />}
         />
         <SummaryCard
@@ -215,11 +233,11 @@ const TodayView = ({
 
       <div className="flex-grow overflow-y-auto">
         <h3 className="text-xl font-semibold mb-4 text-gray-600">Tasks for Today</h3>
-        {todayItems.length === 0 ? (
+        {sortedTodayItems.length === 0 ? (
           <p className="text-gray-500 italic">No tasks scheduled for today.</p>
         ) : (
           <ul className="space-y-4">
-            {todayItems.map(item => (
+            {sortedTodayItems.map(item => (
               <TaskItem key={`${item.isMainTask ? 'task' : 'subtask'}-${item.id}`} item={item} />
             ))}
           </ul>
